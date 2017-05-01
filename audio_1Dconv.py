@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import scipy
 from scipy.io import wavfile
 from keras.models import Sequential
 from keras.layers import Dense
@@ -63,7 +64,7 @@ Xs = []
 for i in range(len(music)):
     music_file = music[i]
     music_audio = load_audio(music_file)
-    last_sample = int(len(music_audio)/30)  # I divide by 30 to get the index of a sample that is 1 s long. I discard the rest off the audio sample.
+    last_sample = int(len(music_audio))  # I divide by 30 to get the index of a sample that is 1 s long. I discard the rest off the audio sample.
     music_audio = music_audio[0:last_sample]
     Xs.append(music_audio)
 
@@ -95,9 +96,10 @@ Xs = np.reshape(Xs, (Xs.shape[0],Xs.shape[1],1))  # Conv1D expects a 3-dim array
 ### STEP 4: CREATE THE MODEL
 model = Sequential()
 model.add(Conv1D(input_shape=(Xs.shape[1],1),  # Length of input vector is contained in the 2nd term of np.shape function
-                 filters=8,
-                 kernel_size=4410,
-                 padding='valid',  # Perhaps try 'causal' according to https://keras.io/layers/convolutional/#conv1d
+                 filters=1,
+                 kernel_size=88200,
+                 strides=2250,
+                 padding='causal',  # Perhaps try 'causal' according to https://keras.io/layers/convolutional/#conv1d
                  activation='tanh'  # tanh goes from -1 to 1, it's basically a "better sigmoid"
                  ))
 '''
@@ -116,13 +118,21 @@ print(model.summary())
 
 ### STEP 5: BEGIN TRAINING THE MODEL
 # Set up Keras checkpoints to monitor the accuracy and save the model when it improves
-filepath="audio_kernels-{epoch:02d}-{val_acc:.2f}.hdf5"
-checkpoint = ModelCheckpoint(filepath, monitor='val_acc', verbose=1, save_best_only=True, mode='max')
+# filepath="audio_kernels-{epoch:02d}-{val_acc:.2f}.hdf5"
+# checkpoint = ModelCheckpoint(filepath, monitor='val_acc', verbose=1, save_best_only=True, mode='max')
+checkpoint = ModelCheckpoint("audio_kernels", verbose=1, save_best_only=True, mode='max')
 callbacks_list = [checkpoint]
 
 # This function actually starts the training
-model.fit(Xs, ys, epochs=4, batch_size=16, callbacks=callbacks_list, verbose=2)
+model.fit(Xs, ys, epochs=100, batch_size=128, callbacks=callbacks_list, verbose=2)
 
 # Evaluate the model on the dataset
 scores = model.evaluate(Xs, ys, verbose=0)
+
+weights = model.get_weights()
+
+for i in range(len(weights[0][0][0])):
+    thisRow = [row[0][i] for row in weights[0]]
+    print(len(thisRow))
+    scipy.io.wavfile.write("kernels/" + str(i) + ".wav", 22050,  np.array(thisRow))
 
